@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schema Validator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .app-header {
+      background: #4f46e5;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(79,70,229,.35);
+    }
+    .app-header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: -.3px; }
+    .app-header p  { font-size: .82rem; opacity: .8; margin-top: 1px; }
+    .header-icon   { font-size: 1.6rem; }
+
+    /* ── Layout ── */
+    .app-main {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      min-height: calc(100vh - 56px);
+    }
+    @media (max-width: 860px) {
+      .app-main { grid-template-columns: 1fr; }
+    }
+
+    /* ── Panels ── */
+    .input-panel {
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .results-panel {
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    /* ── Form elements ── */
+    .section-title {
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    label { font-size: .82rem; font-weight: 600; color: #374151; }
+    input[type="text"], input[type="url"], input[type="password"], textarea, select {
+      padding: 8px 10px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 7px;
+      font-size: .88rem;
+      font-family: inherit;
+      color: #1e293b;
+      background: #fff;
+      transition: border-color .15s;
+      width: 100%;
+    }
+    input:focus, textarea:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.12); }
+    textarea { resize: vertical; min-height: 180px; font-family: 'JetBrains Mono', 'Fira Mono', 'Menlo', monospace; font-size: .8rem; line-height: 1.5; }
+    textarea.invalid { border-color: #ef4444; }
+
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    /* ── Auth toggle ── */
+    .auth-toggle {
+      background: none;
+      border: none;
+      font-size: .8rem;
+      color: #4f46e5;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+      font-weight: 600;
+    }
+    .auth-toggle:hover { text-decoration: underline; }
+    .auth-fields { display: none; }
+    .auth-fields.open { display: block; }
+
+    /* ── Options ── */
+    .option-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .82rem;
+      color: #374151;
+      cursor: pointer;
+    }
+    .option-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: #4f46e5; cursor: pointer; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 9px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .08s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: #4f46e5; color: #fff; width: 100%; justify-content: center; padding: 11px; }
+    .btn-primary:hover:not(:disabled) { background: #4338ca; }
+    .btn-secondary { background: #f1f5f9; color: #374151; border: 1.5px solid #d1d5db; }
+    .btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
+    .btn-copy { background: #f0fdf4; color: #166534; border: 1.5px solid #86efac; font-size: .8rem; }
+    .btn-copy:hover { background: #dcfce7; }
+    .btn-sm { padding: 5px 10px; font-size: .78rem; }
+
+    /* ── JSON parse error ── */
+    .parse-error { font-size: .75rem; color: #ef4444; margin-top: 3px; }
+
+    /* ── Empty / loading / error states ── */
+    .state-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      text-align: center;
+      color: #94a3b8;
+      gap: 10px;
+    }
+    .state-box .icon { font-size: 2.8rem; }
+    .state-box h3 { font-size: 1rem; color: #64748b; font-weight: 600; }
+    .state-box p { font-size: .82rem; max-width: 320px; line-height: 1.5; }
+    .error-box {
+      background: #fef2f2;
+      border: 1.5px solid #fca5a5;
+      border-radius: 10px;
+      padding: 14px 16px;
+      color: #991b1b;
+      font-size: .85rem;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .error-box .icon { font-size: 1.1rem; flex-shrink: 0; }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid #e0e7ff;
+      border-top-color: #4f46e5;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Extracted schemas ── */
+    .section-card {
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .section-card-header {
+      padding: 12px 16px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: .82rem;
+      font-weight: 700;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .schema-count {
+      background: #e0e7ff;
+      color: #4338ca;
+      border-radius: 20px;
+      padding: 2px 9px;
+      font-size: .72rem;
+      font-weight: 700;
+    }
+    .schemas-list { padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .schema-item {
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1.5px solid #e2e8f0;
+      cursor: pointer;
+      font-size: .83rem;
+      color: #374151;
+      transition: border-color .12s, background .12s;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .schema-item:hover { border-color: #a5b4fc; background: #f5f3ff; }
+    .schema-item.selected { border-color: #4f46e5; background: #eef2ff; color: #3730a3; font-weight: 600; }
+    .schema-item .badge {
+      background: #f1f5f9;
+      color: #64748b;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: .7rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .schema-item.selected .badge { background: #c7d2fe; color: #3730a3; }
+
+    /* ── Report ── */
+    .report-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .report-title { font-size: 1rem; font-weight: 700; color: #1e293b; }
+    .report-meta { font-size: .75rem; color: #94a3b8; margin-top: 2px; }
+
+    .summary-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .summary-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: .82rem;
+      font-weight: 700;
+    }
+    .summary-badge .num { font-size: 1.1rem; }
+    .badge-matched { background: #dcfce7; color: #166534; }
+    .badge-missing { background: #fef2f2; color: #991b1b; }
+    .badge-wrong   { background: #fffbeb; color: #92400e; }
+    .badge-extra   { background: #eff6ff; color: #1e40af; }
+
+    .report-group { margin-bottom: 18px; }
+    .group-header {
+      font-size: .75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 6px 0;
+      margin-bottom: 8px;
+      border-bottom: 2px solid currentColor;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .group-matched { color: #16a34a; border-color: #86efac; }
+    .group-missing { color: #dc2626; border-color: #fca5a5; }
+    .group-wrong   { color: #d97706; border-color: #fcd34d; }
+    .group-extra   { color: #2563eb; border-color: #93c5fd; }
+
+    .report-item {
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 5px;
+      font-size: .83rem;
+      line-height: 1.4;
+    }
+    .item-matched { background: #f0fdf4; border: 1px solid #bbf7d0; }
+    .item-missing { background: #fef2f2; border: 1px solid #fecaca; }
+    .item-wrong   { background: #fffbeb; border: 1px solid #fde68a; }
+    .item-extra   { background: #eff6ff; border: 1px solid #bfdbfe; }
+
+    .item-path {
+      font-family: 'JetBrains Mono', 'Fira Mono', 'Menlo', monospace;
+      font-size: .78rem;
+      font-weight: 700;
+    }
+    .item-matched .item-path { color: #15803d; }
+    .item-missing .item-path { color: #b91c1c; }
+    .item-wrong   .item-path { color: #b45309; }
+    .item-extra   .item-path { color: #1d4ed8; }
+
+    .item-values { margin-top: 4px; display: flex; flex-direction: column; gap: 3px; }
+    .item-value-row { display: flex; align-items: baseline; gap: 6px; font-size: .78rem; }
+    .value-label { font-weight: 700; min-width: 60px; color: #64748b; font-size: .72rem; text-transform: uppercase; }
+    .value-content {
+      font-family: 'JetBrains Mono', 'Fira Mono', 'Menlo', monospace;
+      background: rgba(0,0,0,.04);
+      padding: 1px 6px;
+      border-radius: 4px;
+      word-break: break-all;
+      max-width: 500px;
+    }
+    .value-expected { color: #166534; }
+    .value-actual   { color: #991b1b; }
+    .value-matched  { color: #15803d; }
+    .value-extra    { color: #1e40af; }
+
+    .item-note { font-size: .72rem; color: #94a3b8; margin-top: 3px; font-style: italic; }
+
+    /* ── Report Table ── */
+    .table-wrap { overflow-x: auto; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #fff; margin-bottom: 16px; }
+    .report-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .report-table thead th {
+      background: #f8fafc;
+      padding: 10px 14px;
+      text-align: left;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: #64748b;
+      border-bottom: 2px solid #e2e8f0;
+      white-space: nowrap;
+    }
+    .report-table tbody tr { border-bottom: 1px solid #f1f5f9; }
+    .report-table tbody tr:last-child { border-bottom: none; }
+    .cell-path { padding: 9px 14px; min-width: 160px; }
+    .cell-path > code { font-family: 'JetBrains Mono','Fira Mono','Menlo',monospace; font-size: .76rem; font-weight: 700; color: #1e293b; }
+    .cell-val { padding: 9px 14px; max-width: 260px; word-break: break-all; }
+    .cell-status { padding: 9px 14px; white-space: nowrap; }
+
+    .val-code { font-family: 'JetBrains Mono','Fira Mono','Menlo',monospace; font-size: .75rem; padding: 2px 7px; border-radius: 4px; }
+    .val-matched { background: #dcfce7; color: #166534; }
+    .val-exp     { background: #fee2e2; color: #991b1b; }
+    .val-act     { background: #fef3c7; color: #78350f; }
+    .val-xtra    { background: #eff6ff; color: #1e40af; }
+    .val-absent  { color: #94a3b8; font-style: italic; font-size: .75rem; }
+
+    .row-matched td { background: #f0fdf4; }
+    .row-missing td { background: #fef2f2; }
+    .row-wrong   td { background: #fffbeb; }
+    .row-extra   td { background: #eff6ff; }
+    .row-wrong   td:first-child { border-left: 3px solid #f59e0b; padding-left: 11px; }
+    .row-missing td:first-child { border-left: 3px solid #ef4444; padding-left: 11px; }
+    .row-extra   td:first-child { border-left: 3px solid #6366f1; padding-left: 11px; }
+    .row-matched td:first-child { border-left: 3px solid #22c55e; padding-left: 11px; }
+
+    .status-pill { font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
+    .pill-matched { background: #dcfce7; color: #166534; }
+    .pill-missing { background: #fef2f2; color: #991b1b; }
+    .pill-wrong   { background: #fffbeb; color: #92400e; }
+    .pill-extra   { background: #eff6ff; color: #1e40af; }
+
+    /* ── Action dropdown ── */
+    .cell-action { padding: 6px 10px; width: 110px; }
+    .action-select {
+      font-size: .75rem;
+      padding: 4px 6px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 6px;
+      background: #fff;
+      color: #374151;
+      cursor: pointer;
+      width: 100%;
+      transition: border-color .12s, background .12s;
+    }
+    .action-select:focus { outline: none; border-color: #4f46e5; }
+    .action-select.act-expected  { background: #f8fafc; border-color: #94a3b8;  color: #374151; }
+    .action-select.act-to-fix    { background: #fef2f2; border-color: #fca5a5;  color: #dc2626; font-weight: 700; }
+    .action-select.act-fixed     { background: #f0fdf4; border-color: #86efac;  color: #166534; font-weight: 700; }
+    .action-select.act-validated { background: #eff6ff; border-color: #93c5fd;  color: #1d4ed8; font-weight: 700; }
+
+    /* ── All-good banner ── */
+    .all-good {
+      background: #f0fdf4;
+      border: 2px solid #86efac;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      color: #166534;
+    }
+    .all-good .icon { font-size: 2.4rem; }
+    .all-good h3 { font-size: 1.1rem; font-weight: 700; margin-top: 8px; }
+    .all-good p { font-size: .85rem; color: #4ade80; margin-top: 4px; opacity: .8; }
+
+    /* ── Divider ── */
+    hr { border: none; border-top: 1px solid #e2e8f0; }
+
+    /* ── URL info bar ── */
+    .url-info {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: .78rem;
+      color: #64748b;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      word-break: break-all;
+    }
+    .url-info .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0;
+    }
+
+    /* ── Multi-schema sections ── */
+    .schema-section {
+      margin-bottom: 16px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .schema-section-header {
+      padding: 12px 16px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .schema-section-title { font-weight: 700; font-size: .9rem; color: #1e293b; }
+    .schema-section-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+    .schema-section .table-wrap { border: none; border-radius: 0; margin-bottom: 0; }
+    .schema-not-found {
+      background: #fef2f2;
+      border: 1.5px solid #fca5a5;
+      border-radius: 8px;
+      margin: 12px;
+      padding: 10px 14px;
+      font-size: .83rem;
+      color: #991b1b;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    /* ── Schema diff panels ── */
+    .schema-panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .schema-panels-in-section { padding: 14px; }
+    @media (max-width: 1300px) { .schema-panels { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 800px)  { .schema-panels { grid-template-columns: 1fr; } }
+
+    .schema-panel {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-label {
+      padding: 8px 12px;
+      background: #f1f5f9;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: #64748b;
+      flex-shrink: 0;
+    }
+    .panel-label-annotated { background: #fefce8; color: #92400e; border-color: #fde68a; }
+
+    .json-pre {
+      margin: 0;
+      padding: 12px 14px;
+      font-family: 'JetBrains Mono','Fira Mono','Menlo',monospace;
+      font-size: .74rem;
+      line-height: 1.65;
+      overflow-x: auto;
+      white-space: pre;
+      flex: 1;
+      color: #334155;
+    }
+
+    /* JSON syntax */
+    .jv-str  { color: #16a34a; }
+    .jv-num  { color: #2563eb; }
+    .jv-bool { color: #7c3aed; }
+    .jv-null { color: #94a3b8; font-style: italic; }
+    .jv-key  { color: #0f172a; font-weight: 700; }
+
+    /* Annotations */
+    .ann-wrong   { color: #dc2626; font-weight: 700; }
+    .ann-missing { color: #15803d; font-weight: 700; }
+    .ann-extra   { color: #1d4ed8; font-weight: 700; }
+    .ann-cmt     { color: #9ca3af; font-style: italic; font-weight: 400; }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <span class="header-icon">🔍</span>
+  <div>
+    <h1>Schema Validator</h1>
+    <p>Extract &amp; validate JSON-LD / JSON schemas from any URL</p>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- ── Input Panel ── -->
+  <aside class="input-panel">
+
+    <div>
+      <p class="section-title">Target URL</p>
+      <div class="form-group">
+        <label for="url">Page or API endpoint</label>
+        <input type="url" id="url" placeholder="https://staging.example.com/product/123" autocomplete="off">
+      </div>
+    </div>
+
+    <div>
+      <button class="auth-toggle" onclick="toggleAuth()" id="auth-toggle-btn">
+        + Add Basic Auth credentials
+      </button>
+      <div class="auth-fields" id="auth-fields" style="margin-top:10px">
+        <p class="section-title">Basic Auth</p>
+        <div class="row-2">
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" placeholder="user" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" placeholder="pass" autocomplete="current-password">
+          </div>
+        </div>
+        <p style="font-size:.72rem;color:#94a3b8;margin-top:5px">
+          The request also sends <code>User-Agent: SchemaValidator/1.0 skipAuth</code> to bypass middleware checks.
+        </p>
+      </div>
+    </div>
+
+    <hr>
+
+    <div>
+      <p class="section-title">Expected Schema</p>
+      <div class="form-group">
+        <label for="expected">Paste your expected JSON / JSON-LD</label>
+        <textarea id="expected" placeholder='{"@type": "Product", "name": "Widget Pro", "offers": {"@type": "Offer", "price": "29.99"}}'></textarea>
+        <span class="parse-error" id="parse-error" hidden></span>
+      </div>
+    </div>
+
+    <div>
+      <p class="section-title">Options</p>
+      <label class="option-row">
+        <input type="checkbox" id="strict-mode">
+        <span><strong>Strict mode</strong> — flag extra properties as errors</span>
+      </label>
+    </div>
+
+    <button class="btn btn-primary" id="validate-btn" onclick="validate()">
+      <span>🚀</span> Fetch &amp; Validate
+    </button>
+
+  </aside>
+
+  <!-- ── Results Panel ── -->
+  <section class="results-panel" id="results-panel">
+
+    <div class="state-box" id="state-empty">
+      <div class="icon">📋</div>
+      <h3>No results yet</h3>
+      <p>Enter a URL and your expected schema on the left, then click <strong>Fetch &amp; Validate</strong>.</p>
+    </div>
+
+    <div hidden id="state-loading">
+      <div class="state-box">
+        <div class="spinner"></div>
+        <h3>Fetching...</h3>
+        <p>Retrieving the URL and extracting schemas.</p>
+      </div>
+    </div>
+
+    <div hidden id="state-error">
+      <div class="error-box">
+        <span class="icon">⚠️</span>
+        <div>
+          <strong>Fetch failed</strong><br>
+          <span id="error-message"></span>
+        </div>
+      </div>
+    </div>
+
+    <div hidden id="state-results">
+      <div class="url-info" id="url-info">
+        <div class="status-dot"></div>
+        <span id="url-info-text"></span>
+      </div>
+
+      <!-- Extracted schemas list -->
+      <div class="section-card" id="schemas-card">
+        <div class="section-card-header">
+          Extracted Schemas
+          <span class="schema-count" id="schema-count-badge">0</span>
+        </div>
+        <div class="schemas-list" id="schemas-list"></div>
+      </div>
+
+      <!-- Comparison report -->
+      <div id="report-area"></div>
+    </div>
+
+  </section>
+</main>
+
+<script>
+  // ─── State ───────────────────────────────────────────────────────────────
+  let extractedSchemas = [];
+  let selectedSchemaId = null;
+  let lastUrl = '';
+  let lastReport = null;
+  let actionState = new Map(); // key: "sectionKey||path||status" → selected action
+
+  // ─── UI Helpers ──────────────────────────────────────────────────────────
+  const el = (id) => document.getElementById(id);
+
+  function showState(name) {
+    ['empty', 'loading', 'error', 'results'].forEach(s => {
+      el(`state-${s}`).hidden = s !== name;
+    });
+  }
+
+  function toggleAuth() {
+    const fields = el('auth-fields');
+    const btn    = el('auth-toggle-btn');
+    const open   = fields.classList.toggle('open');
+    btn.textContent = open ? '− Hide Basic Auth credentials' : '+ Add Basic Auth credentials';
+  }
+
+  // ─── Input helpers ────────────────────────────────────────────────────
+  function parseExpected() {
+    const raw = el('expected').value.trim();
+    if (!raw) return { ok: true, data: null };
+    try {
+      const data = JSON.parse(raw);
+      el('expected').classList.remove('invalid');
+      el('parse-error').hidden = true;
+      return { ok: true, data };
+    } catch (e) {
+      el('expected').classList.add('invalid');
+      el('parse-error').textContent = `JSON parse error: ${e.message}`;
+      el('parse-error').hidden = false;
+      return { ok: false, data: null };
+    }
+  }
+
+  el('expected').addEventListener('input', parseExpected);
+
+  // ─── Main validate flow ───────────────────────────────────────────────
+  async function validate() {
+    const url = el('url').value.trim();
+    if (!url) { el('url').focus(); return; }
+
+    const parsed = parseExpected();
+    if (!parsed.ok) return;
+
+    const username = el('username').value.trim();
+    const password = el('password').value.trim();
+
+    el('validate-btn').disabled = true;
+    showState('loading');
+    lastUrl = url;
+    actionState.clear();
+
+    try {
+      const resp = await fetch('/api/fetch-schemas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, username: username || undefined, password: password || undefined }),
+      });
+      const result = await resp.json();
+
+      if (!result.success) {
+        el('error-message').textContent = result.error;
+        showState('error');
+        return;
+      }
+
+      extractedSchemas = result.schemas;
+      el('url-info-text').textContent =
+        `${result.statusCode} OK — ${result.resolvedUrl || url} — ${extractedSchemas.length} schema(s) found`;
+      showState('results');
+
+      if (!parsed.data) {
+        // No expected — just show extracted schemas list
+        selectedSchemaId = null;
+        renderSchemasList(extractedSchemas);
+        el('report-area').innerHTML = `
+          <div class="state-box" style="padding:30px">
+            <div class="icon">☝️</div>
+            <h3>Schemas extracted</h3>
+            <p>Paste your expected schema on the left and click Validate to compare, or click a schema to preview it.</p>
+          </div>`;
+        return;
+      }
+
+      if (Array.isArray(parsed.data)) {
+        // Array of expected schemas → multi-comparison, auto-match by @type
+        selectedSchemaId = null;
+        renderSchemasList(extractedSchemas);
+        runMultiComparison(parsed.data, extractedSchemas);
+      } else {
+        // Single expected schema → find best matching extracted schema by @type
+        selectedSchemaId = null;
+        if (extractedSchemas.length > 0) {
+          const expType = parsed.data['@type'];
+          if (expType) {
+            const t = Array.isArray(expType) ? expType[0] : expType;
+            const match = extractedSchemas.find(s =>
+              s.schemaType && (Array.isArray(s.schemaType) ? s.schemaType.includes(t) : s.schemaType === t)
+            );
+            selectedSchemaId = match ? match.id : extractedSchemas[0].id;
+          } else {
+            selectedSchemaId = extractedSchemas[0].id;
+          }
+        }
+        renderSchemasList(extractedSchemas);
+
+        if (selectedSchemaId !== null) {
+          const actual = extractedSchemas.find(s => s.id === selectedSchemaId);
+          if (actual) runSingleComparison(parsed.data, actual);
+        } else {
+          el('report-area').innerHTML = `
+            <div class="error-box">
+              <span class="icon">ℹ️</span>
+              <div><strong>No schemas found on page</strong><br>
+              No JSON-LD blocks or JSON response detected at this URL.</div>
+            </div>`;
+        }
+      }
+
+    } catch (err) {
+      el('error-message').textContent = err.message;
+      showState('error');
+    } finally {
+      el('validate-btn').disabled = false;
+    }
+  }
+
+  // ─── Schema list ──────────────────────────────────────────────────────
+  function renderSchemasList(schemas) {
+    el('schema-count-badge').textContent = schemas.length;
+    if (schemas.length === 0) {
+      el('schemas-list').innerHTML = '<p style="padding:12px;font-size:.82rem;color:#94a3b8">None found</p>';
+      return;
+    }
+    el('schemas-list').innerHTML = schemas.map(s => `
+      <div class="schema-item ${s.id === selectedSchemaId ? 'selected' : ''}" onclick="selectSchema(${s.id})">
+        <span>${escHtml(s.label)}</span>
+        <span class="badge">${s.type}</span>
+      </div>
+    `).join('');
+  }
+
+  function selectSchema(id) {
+    const parsed = parseExpected();
+    if (!parsed.ok) return;
+
+    // In multi-schema mode, clicking a schema in the list doesn't switch the report
+    if (Array.isArray(parsed.data)) return;
+
+    selectedSchemaId = id;
+    renderSchemasList(extractedSchemas);
+    const actual = extractedSchemas.find(s => s.id === id);
+    if (!actual) return;
+
+    if (parsed.data) {
+      runSingleComparison(parsed.data, actual);
+    } else {
+      el('report-area').innerHTML = `
+        <div class="section-card">
+          <div class="section-card-header">Schema Data</div>
+          <pre style="padding:14px;font-size:.75rem;overflow-x:auto;white-space:pre-wrap;line-height:1.5;color:#1e293b">${escHtml(JSON.stringify(actual.data, null, 2))}</pre>
+        </div>`;
+    }
+  }
+
+  // ─── Action column ────────────────────────────────────────────────────
+  function updateAction(sel) {
+    const key   = sel.dataset.key;
+    const value = sel.value;
+    if (value) actionState.set(key, value);
+    else       actionState.delete(key);
+    sel.className = 'action-select' + (value ? ' act-' + value.replace(' ', '-') : '');
+  }
+
+  // ─── Utilities ────────────────────────────────────────────────────────
+  function typeOf(v) {
+    if (v === null) return 'null';
+    if (Array.isArray(v)) return 'array';
+    return typeof v;
+  }
+
+  // Recursively emit every primitive leaf of a subtree as individual missing/extra rows
+  function leafRows(node, basePath, status) {
+    const out = [];
+    const key = status === 'missing' ? 'expected' : 'actual';
+    function walk(n, p) {
+      const t = typeOf(n);
+      if (t === 'object') {
+        const keys = Object.keys(n);
+        if (keys.length === 0) { out.push({ status, path: p, [key]: n }); }
+        else { keys.forEach(k => walk(n[k], p ? `${p}.${k}` : k)); }
+      } else if (t === 'array') {
+        if (n.length === 0) { out.push({ status, path: p, [key]: n }); }
+        else { n.forEach((item, i) => walk(item, `${p}[${i}]`)); }
+      } else {
+        out.push({ status, path: p, [key]: n });
+      }
+    }
+    walk(node, basePath);
+    return out;
+  }
+
+  // Count how many primitive leaf values two objects share (used for best-match scoring)
+  function countMatchingLeaves(a, b) {
+    let count = 0;
+    function scan(x, y) {
+      const tx = typeOf(x), ty = typeOf(y);
+      if (tx !== ty) return;
+      if (tx === 'object') {
+        for (const k of Object.keys(x)) { if (k in y) scan(x[k], y[k]); }
+      } else if (tx !== 'array') {
+        if (x === y) count++;
+      }
+    }
+    scan(a, b);
+    return count;
+  }
+
+  function schemaTypesMatch(schemaType, expType) {
+    if (!schemaType || !expType) return false;
+    const at = Array.isArray(schemaType) ? schemaType : [schemaType];
+    const et = Array.isArray(expType)    ? expType    : [expType];
+    return at.some(a => et.includes(a));
+  }
+
+  // ─── Diff engine ─────────────────────────────────────────────────────
+  function deepDiff(expected, actual) {
+    const out = [];
+
+    function walk(exp, act, p) {
+      const et = typeOf(exp);
+      const at = typeOf(act);
+
+      if (et !== at) {
+        out.push({ status: 'wrong', path: p, expected: exp, actual: act,
+                   note: `type mismatch: expected ${et}, got ${at}` });
+        return;
+      }
+
+      if (et === 'object') {
+        for (const k of Object.keys(exp)) {
+          const cp = p ? `${p}.${k}` : k;
+          if (k in act) walk(exp[k], act[k], cp);
+          else out.push(...leafRows(exp[k], cp, 'missing'));
+        }
+        for (const k of Object.keys(act)) {
+          if (!(k in exp)) {
+            const cp = p ? `${p}.${k}` : k;
+            out.push(...leafRows(act[k], cp, 'extra'));
+          }
+        }
+        return;
+      }
+
+      if (et === 'array') {
+        const allObjExp = exp.length > 0 && exp.every(i => typeOf(i) === 'object');
+        const allObjAct = act.every(i => typeOf(i) === 'object');
+        const allPrimExp = exp.every(i => typeOf(i) !== 'object' && typeOf(i) !== 'array');
+        const allPrimAct = act.every(i => typeOf(i) !== 'object' && typeOf(i) !== 'array');
+
+        if (allObjExp && allObjAct) {
+          // Arrays of objects — order-independent matching.
+          // Two-pass to avoid greedy errors when items share the same @type:
+          //   Pass 1 (global): assign exact key-field matches for ALL expected items first.
+          //   Pass 2: fill remaining unmatched expected items by highest leaf-similarity.
+          const KEY_FIELDS = ['@id', 'name', 'url', 'position', 'item', 'value'];
+          const used    = new Set();
+          const matches = new Array(exp.length).fill(-1);
+
+          // Pass 1 — exact key field match
+          exp.forEach((expItem, ei) => {
+            for (const kf of KEY_FIELDS) {
+              if (kf in expItem && typeOf(expItem[kf]) !== 'object') {
+                const idx = act.findIndex((a, ai) => !used.has(ai) && a[kf] === expItem[kf]);
+                if (idx >= 0) { matches[ei] = idx; used.add(idx); break; }
+              }
+            }
+          });
+
+          // Pass 2 — similarity fallback for still-unmatched expected items
+          exp.forEach((expItem, ei) => {
+            if (matches[ei] >= 0) return;
+            let best = -1, bestIdx = -1;
+            act.forEach((actItem, ai) => {
+              if (used.has(ai)) return;
+              const score = countMatchingLeaves(expItem, actItem);
+              if (score > best) { best = score; bestIdx = ai; }
+            });
+            if (best > 0) { matches[ei] = bestIdx; used.add(bestIdx); }
+          });
+
+          exp.forEach((expItem, ei) => {
+            const cp = `${p}[${ei}]`;
+            if (matches[ei] >= 0) walk(expItem, act[matches[ei]], cp);
+            else out.push(...leafRows(expItem, cp, 'missing'));
+          });
+
+          act.forEach((actItem, ai) => {
+            if (!used.has(ai)) out.push(...leafRows(actItem, `${p}[${ai}]`, 'extra'));
+          });
+
+        } else if (allPrimExp && allPrimAct) {
+          // Arrays of primitives (e.g. dayOfWeek, sameAs) — set membership, order ignored
+          const actMatched = new Set();
+          exp.forEach((expVal, ei) => {
+            const cp = `${p}[${ei}]`;
+            const idx = act.findIndex((v, i) => v === expVal && !actMatched.has(i));
+            if (idx >= 0) {
+              actMatched.add(idx);
+              out.push({ status: 'matched', path: cp, value: expVal });
+            } else {
+              out.push({ status: 'missing', path: cp, expected: expVal });
+            }
+          });
+          act.forEach((actVal, ai) => {
+            if (!actMatched.has(ai)) out.push({ status: 'extra', path: `${p}[${ai}]`, actual: actVal });
+          });
+
+        } else {
+          // Mixed or nested arrays — fall back to positional
+          const len = Math.max(exp.length, act.length);
+          for (let i = 0; i < len; i++) {
+            const cp = `${p}[${i}]`;
+            if (i >= act.length) out.push(...leafRows(exp[i], cp, 'missing'));
+            else if (i >= exp.length) out.push(...leafRows(act[i], cp, 'extra'));
+            else walk(exp[i], act[i], cp);
+          }
+        }
+        return;
+      }
+
+      if (exp !== act) out.push({ status: 'wrong', path: p, expected: exp, actual: act });
+      else             out.push({ status: 'matched', path: p, value: exp });
+    }
+
+    walk(expected, actual, '');
+    return out;
+  }
+
+  // ─── Single-schema comparison ─────────────────────────────────────────
+  function runSingleComparison(expected, actualSchema) {
+    const results = deepDiff(expected, actualSchema.data);
+    lastReport = { mode: 'single', results, expected, actual: actualSchema, url: lastUrl };
+    renderSingleReport(lastReport);
+  }
+
+  // ─── Multi-schema comparison ──────────────────────────────────────────
+  function runMultiComparison(expectedArray, allExtracted) {
+    const pairs = expectedArray.map(exp => {
+      const match = allExtracted.find(s => schemaTypesMatch(s.schemaType, exp['@type']));
+      const results = match
+        ? deepDiff(exp, match.data)
+        : leafRows(exp, '', 'missing');
+      return { expected: exp, actual: match || null, results };
+    });
+    lastReport = { mode: 'multi', pairs, url: lastUrl };
+    renderMultiReport(lastReport);
+  }
+
+  // ─── Shared rendering helpers ─────────────────────────────────────────
+  function groupAndSort(results) {
+    const matched = results.filter(r => r.status === 'matched');
+    const missing = results.filter(r => r.status === 'missing');
+    const wrong   = results.filter(r => r.status === 'wrong');
+    const extra   = results.filter(r => r.status === 'extra');
+    return { matched, missing, wrong, extra, sorted: [...wrong, ...missing, ...extra, ...matched] };
+  }
+
+  function badgesHtml(matched, missing, wrong, extra) {
+    return `<div class="summary-row">
+      <div class="summary-badge badge-matched"><span class="num">${matched}</span> Matched</div>
+      <div class="summary-badge badge-missing"><span class="num">${missing}</span> Missing</div>
+      <div class="summary-badge badge-wrong"><span class="num">${wrong}</span> Wrong</div>
+      <div class="summary-badge badge-extra"><span class="num">${extra}</span> Extra</div>
+    </div>`;
+  }
+
+  const PILL = {
+    matched: `<span class="status-pill pill-matched">✓ Matched</span>`,
+    missing: `<span class="status-pill pill-missing">✗ Missing</span>`,
+    wrong:   `<span class="status-pill pill-wrong">⚠ Wrong</span>`,
+    extra:   `<span class="status-pill pill-extra">+ Extra</span>`,
+  };
+
+  function tableHtml(sorted, sectionKey = '') {
+    if (!sorted.length) return '';
+    const ACTION_OPTS = ['expected', 'to fix', 'fixed', 'validated'];
+    const rows = sorted.map(item => {
+      let expCell, actCell;
+      if (item.status === 'matched') {
+        expCell = `<code class="val-code val-matched">${escHtml(fmtVal(item.value))}</code>`;
+        actCell = `<code class="val-code val-matched">${escHtml(fmtVal(item.value))}</code>`;
+      } else if (item.status === 'missing') {
+        expCell = `<code class="val-code val-exp">${escHtml(fmtVal(item.expected))}</code>`;
+        actCell = `<span class="val-absent">missing</span>`;
+      } else if (item.status === 'extra') {
+        expCell = `<span class="val-absent">not expected</span>`;
+        actCell = `<code class="val-code val-xtra">${escHtml(fmtVal(item.actual))}</code>`;
+      } else {
+        expCell = `<code class="val-code val-exp">${escHtml(fmtVal(item.expected))}</code>`;
+        actCell = `<code class="val-code val-act">${escHtml(fmtVal(item.actual))}</code>`;
+      }
+
+      const aKey    = `${sectionKey}||${item.path || '(root)'}||${item.status}`;
+      const aVal    = actionState.get(aKey) || '';
+      const aCls    = aVal ? ` act-${aVal.replace(' ', '-')}` : '';
+      const options = ACTION_OPTS.map(o =>
+        `<option value="${o}"${aVal === o ? ' selected' : ''}>${o}</option>`
+      ).join('');
+
+      return `<tr class="row-${item.status}">
+        <td class="cell-path"><code>${escHtml(item.path || '(root)')}</code>${item.note ? `<div class="item-note">${escHtml(item.note)}</div>` : ''}</td>
+        <td class="cell-val">${expCell}</td>
+        <td class="cell-val">${actCell}</td>
+        <td class="cell-status">${PILL[item.status]}</td>
+        <td class="cell-action">
+          <select class="action-select${aCls}" data-key="${escHtml(aKey)}" onchange="updateAction(this)">
+            <option value="">—</option>
+            ${options}
+          </select>
+        </td>
+      </tr>`;
+    }).join('');
+    return `<div class="table-wrap"><table class="report-table">
+      <thead><tr><th>Property</th><th>Expected</th><th>Actual</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  // ─── Plain JSON → HTML ────────────────────────────────────────────────
+  function jsonHtml(obj, indent) {
+    indent = indent || 0;
+    const t = typeOf(obj);
+    const pad = '  '.repeat(indent + 1);
+    const padC = '  '.repeat(indent);
+    if (t === 'null')    return '<span class="jv-null">null</span>';
+    if (t === 'boolean') return `<span class="jv-bool">${obj}</span>`;
+    if (t === 'number')  return `<span class="jv-num">${escHtml(String(obj))}</span>`;
+    if (t === 'string')  return `<span class="jv-str">${escHtml(JSON.stringify(obj))}</span>`;
+    if (t === 'array') {
+      if (!obj.length) return '[]';
+      return `[\n${obj.map(v => `${pad}${jsonHtml(v, indent + 1)}`).join(',\n')}\n${padC}]`;
+    }
+    if (t === 'object') {
+      const ks = Object.keys(obj);
+      if (!ks.length) return '{}';
+      return `{\n${ks.map(k => `${pad}<span class="jv-key">${escHtml(JSON.stringify(k))}</span>: ${jsonHtml(obj[k], indent + 1)}`).join(',\n')}\n${padC}}`;
+    }
+    return escHtml(String(obj));
+  }
+
+  // ─── Annotated JSON → HTML ────────────────────────────────────────────
+  function annotatedJson(exp, act, indent) {
+    indent = indent || 0;
+    const et = typeOf(exp), at = typeOf(act);
+    const pad = '  '.repeat(indent + 1);
+    const padC = '  '.repeat(indent);
+
+    if (et !== at) {
+      return `<span class="ann-wrong">${jsonHtml(act, indent)}</span> <span class="ann-cmt">// ⚠ wrong type — expected ${et}</span>`;
+    }
+
+    if (et === 'object') {
+      const lines = [];
+      for (const k of Object.keys(exp)) {
+        const kS = `<span class="jv-key">${escHtml(JSON.stringify(k))}</span>`;
+        if (k in act) {
+          lines.push(`${pad}${kS}: ${annotatedJson(exp[k], act[k], indent + 1)}`);
+        } else {
+          lines.push(`${pad}<span class="ann-missing">${kS}: ${jsonHtml(exp[k], indent + 1)}</span> <span class="ann-cmt">// ✗ missing — add this</span>`);
+        }
+      }
+      for (const k of Object.keys(act)) {
+        if (!(k in exp)) {
+          const kS = `<span class="jv-key">${escHtml(JSON.stringify(k))}</span>`;
+          lines.push(`${pad}<span class="ann-extra">${kS}: ${jsonHtml(act[k], indent + 1)}</span> <span class="ann-cmt">// + extra, not expected</span>`);
+        }
+      }
+      if (!lines.length) return '{}';
+      return `{\n${lines.join(',\n')}\n${padC}}`;
+    }
+
+    if (et === 'array') {
+      const allObjE = exp.length > 0 && exp.every(i => typeOf(i) === 'object');
+      const allObjA = act.every(i => typeOf(i) === 'object');
+      const allPrimE = exp.every(i => typeOf(i) !== 'object' && typeOf(i) !== 'array');
+      const allPrimA = act.every(i => typeOf(i) !== 'object' && typeOf(i) !== 'array');
+      const lines = [];
+
+      if (allObjE && allObjA) {
+        const KEY_FIELDS = ['@id', 'name', 'url', 'position', 'item', 'value'];
+        const used = new Set(), matches = new Array(exp.length).fill(-1);
+        exp.forEach((eI, ei) => {
+          for (const kf of KEY_FIELDS) {
+            if (kf in eI && typeOf(eI[kf]) !== 'object') {
+              const idx = act.findIndex((a, ai) => !used.has(ai) && a[kf] === eI[kf]);
+              if (idx >= 0) { matches[ei] = idx; used.add(idx); break; }
+            }
+          }
+        });
+        exp.forEach((eI, ei) => {
+          if (matches[ei] >= 0) return;
+          let best = -1, bIdx = -1;
+          act.forEach((aI, ai) => {
+            if (used.has(ai)) return;
+            const s = countMatchingLeaves(eI, aI);
+            if (s > best) { best = s; bIdx = ai; }
+          });
+          if (best > 0) { matches[ei] = bIdx; used.add(bIdx); }
+        });
+        exp.forEach((eI, ei) => {
+          if (matches[ei] >= 0) lines.push(`${pad}${annotatedJson(eI, act[matches[ei]], indent + 1)}`);
+          else lines.push(`${pad}<span class="ann-missing">${jsonHtml(eI, indent + 1)}</span> <span class="ann-cmt">// ✗ missing</span>`);
+        });
+        act.forEach((aI, ai) => {
+          if (!used.has(ai)) lines.push(`${pad}<span class="ann-extra">${jsonHtml(aI, indent + 1)}</span> <span class="ann-cmt">// + extra, not expected</span>`);
+        });
+
+      } else if (allPrimE && allPrimA) {
+        const actM = new Set();
+        exp.forEach(ev => {
+          const idx = act.findIndex((v, i) => v === ev && !actM.has(i));
+          if (idx >= 0) { actM.add(idx); lines.push(`${pad}${jsonHtml(act[idx], indent + 1)}`); }
+          else lines.push(`${pad}<span class="ann-missing">${jsonHtml(ev, indent + 1)}</span> <span class="ann-cmt">// ✗ missing</span>`);
+        });
+        act.forEach((av, ai) => {
+          if (!actM.has(ai)) lines.push(`${pad}<span class="ann-extra">${jsonHtml(av, indent + 1)}</span> <span class="ann-cmt">// + extra</span>`);
+        });
+
+      } else {
+        const len = Math.max(exp.length, act.length);
+        for (let i = 0; i < len; i++) {
+          if (i >= act.length) lines.push(`${pad}<span class="ann-missing">${jsonHtml(exp[i], indent + 1)}</span> <span class="ann-cmt">// ✗ missing</span>`);
+          else if (i >= exp.length) lines.push(`${pad}<span class="ann-extra">${jsonHtml(act[i], indent + 1)}</span> <span class="ann-cmt">// + extra</span>`);
+          else lines.push(`${pad}${annotatedJson(exp[i], act[i], indent + 1)}`);
+        }
+      }
+      if (!lines.length) return '[]';
+      return `[\n${lines.join(',\n')}\n${padC}]`;
+    }
+
+    // Primitives
+    if (exp === act) return jsonHtml(act);
+    return `<span class="ann-wrong">${escHtml(JSON.stringify(act))}</span> <span class="ann-cmt">// ⚠ expected: ${escHtml(JSON.stringify(exp))}</span>`;
+  }
+
+  // ─── Render single report ─────────────────────────────────────────────
+  function renderSingleReport({ results, expected, actual, url }) {
+    const { matched, missing, wrong, extra } = groupAndSort(results);
+    el('report-area').innerHTML = `
+      <div class="report-header">
+        <div>
+          <div class="report-title">Validation Report: ${escHtml(actual.label)}</div>
+          <div class="report-meta">${escHtml(url)} · ${new Date().toLocaleString()}</div>
+        </div>
+        <button class="btn btn-copy btn-sm" onclick="copyReport()">📋 Copy Report</button>
+      </div>
+      ${badgesHtml(matched.length, missing.length, wrong.length, extra.length)}
+      <div class="schema-panels">
+        <div class="schema-panel">
+          <div class="panel-label">Expected</div>
+          <pre class="json-pre">${jsonHtml(expected)}</pre>
+        </div>
+        <div class="schema-panel">
+          <div class="panel-label">Actual</div>
+          <pre class="json-pre">${jsonHtml(actual.data)}</pre>
+        </div>
+        <div class="schema-panel">
+          <div class="panel-label panel-label-annotated">Annotated Actual</div>
+          <pre class="json-pre">${annotatedJson(expected, actual.data)}</pre>
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── Render multi-schema report ───────────────────────────────────────
+  function renderMultiReport({ pairs, url }) {
+    let totM = 0, totMi = 0, totW = 0, totE = 0;
+
+    const sections = pairs.map(({ expected, actual, results }) => {
+      const { matched, missing, wrong, extra } = groupAndSort(results);
+      totM += matched.length; totMi += missing.length;
+      totW += wrong.length;   totE  += extra.length;
+
+      const typeLabel = [].concat(expected['@type'] || 'Unknown').join(', ');
+      const sectionKey = actual ? actual.label : `JSON-LD: ${typeLabel}`;
+
+      const notFound = !actual ? `
+        <div class="schema-not-found">
+          <span>❌</span>
+          <div><strong>Not found on page</strong> — no schema with <code>@type: "${escHtml(typeLabel)}"</code> was extracted from the URL. All fields listed as missing.</div>
+        </div>` : '';
+
+      const miniPills = [
+        matched.length ? `<span class="status-pill pill-matched">✓ ${matched.length}</span>` : '',
+        missing.length ? `<span class="status-pill pill-missing">✗ ${missing.length}</span>` : '',
+        wrong.length   ? `<span class="status-pill pill-wrong">⚠ ${wrong.length}</span>`   : '',
+        extra.length   ? `<span class="status-pill pill-extra">+ ${extra.length}</span>`   : '',
+      ].join('');
+
+      const panels = actual ? `
+        <div class="schema-panels schema-panels-in-section">
+          <div class="schema-panel">
+            <div class="panel-label">Expected</div>
+            <pre class="json-pre">${jsonHtml(expected)}</pre>
+          </div>
+          <div class="schema-panel">
+            <div class="panel-label">Actual</div>
+            <pre class="json-pre">${jsonHtml(actual.data)}</pre>
+          </div>
+          <div class="schema-panel">
+            <div class="panel-label panel-label-annotated">Annotated Actual</div>
+            <pre class="json-pre">${annotatedJson(expected, actual.data)}</pre>
+          </div>
+        </div>` : `
+        <div class="schema-panels schema-panels-in-section" style="grid-template-columns:1fr">
+          <div class="schema-panel">
+            <div class="panel-label">Expected (not found on page)</div>
+            <pre class="json-pre">${jsonHtml(expected)}</pre>
+          </div>
+        </div>`;
+
+      return `<div class="schema-section">
+        <div class="schema-section-header">
+          <span class="schema-section-title">${escHtml(sectionKey)}</span>
+          <div class="schema-section-badges">${miniPills}</div>
+        </div>
+        ${notFound}
+        ${panels}
+      </div>`;
+    }).join('');
+
+    el('report-area').innerHTML = `
+      <div class="report-header">
+        <div>
+          <div class="report-title">Validation Report · ${pairs.length} schema${pairs.length !== 1 ? 's' : ''}</div>
+          <div class="report-meta">${escHtml(url)} · ${new Date().toLocaleString()}</div>
+        </div>
+        <button class="btn btn-copy btn-sm" onclick="copyReport()">📋 Copy Report</button>
+      </div>
+      ${badgesHtml(totM, totMi, totW, totE)}
+      ${sections}
+    `;
+  }
+
+  // ─── Copy report as rich HTML (pastes styled into Google Docs) ───────
+  async function copyReport() {
+    if (!lastReport) return;
+
+    // Convert CSS classes to inline styles for clipboard output
+    function toInline(html) {
+      return html
+        .replace(/class="jv-key"/g,    'style="font-weight:700;color:#0f172a"')
+        .replace(/class="jv-str"/g,    'style="color:#16a34a"')
+        .replace(/class="jv-num"/g,    'style="color:#2563eb"')
+        .replace(/class="jv-bool"/g,   'style="color:#7c3aed"')
+        .replace(/class="jv-null"/g,   'style="color:#94a3b8;font-style:italic"')
+        .replace(/class="ann-wrong"/g,   'style="color:#dc2626;font-weight:700"')
+        .replace(/class="ann-missing"/g, 'style="color:#15803d;font-weight:700"')
+        .replace(/class="ann-extra"/g,   'style="color:#1d4ed8;font-weight:700"')
+        .replace(/class="ann-cmt"/g,     'style="color:#9ca3af;font-style:italic"');
+    }
+
+    const PRE  = 'font-family:"Courier New",monospace;font-size:9pt;line-height:1.65;white-space:pre;background:#fafafa;padding:12px 16px;border:1px solid #e2e8f0;border-radius:4px;margin-bottom:14px;display:block;';
+    const H1   = 'font-size:18pt;color:#1e293b;border-bottom:3px solid #4f46e5;padding-bottom:8px;margin-bottom:14px;font-family:Arial,sans-serif;';
+    const H2   = 'font-size:12pt;color:#1e293b;margin-top:22px;margin-bottom:6px;border-left:4px solid #4f46e5;padding-left:10px;font-family:Arial,sans-serif;';
+    const META = 'font-family:Arial,sans-serif;font-size:10pt;color:#374151;margin-bottom:6px;';
+    const BB   = 'font-family:Arial,sans-serif;font-size:10pt;font-weight:bold;padding:3px 9px;border-radius:4px;margin-right:5px;';
+    const LEGEND = 'font-family:Arial,sans-serif;font-size:9pt;color:#64748b;margin-bottom:10px;';
+
+    function summaryBadges(m, mi, w, e) {
+      return `<span style="${BB}background:#dcfce7;color:#166534">✓ ${m} matched</span>`
+           + `<span style="${BB}background:#fef2f2;color:#dc2626">✗ ${mi} missing</span>`
+           + `<span style="${BB}background:#fffbeb;color:#b45309">⚠ ${w} wrong</span>`
+           + `<span style="${BB}background:#eff6ff;color:#1d4ed8">+ ${e} extra</span>`;
+    }
+
+    const buildSection = (title, expected, actualData, results) => {
+      const { matched, missing, wrong, extra } = groupAndSort(results);
+      let s = `<h2 style="${H2}">${escHtml(title)}</h2>`;
+      s += `<p style="${META}margin-bottom:10px">${summaryBadges(matched.length, missing.length, wrong.length, extra.length)}</p>`;
+      if (actualData) {
+        s += `<p style="${LEGEND}"><strong>Annotated Actual</strong> — `
+           + `<span style="color:#15803d;font-weight:bold">green = missing (add this)</span>, `
+           + `<span style="color:#dc2626;font-weight:bold">red = wrong value</span>, `
+           + `<span style="color:#1d4ed8;font-weight:bold">blue = extra (not expected)</span>, `
+           + `<span style="color:#9ca3af;font-style:italic">grey italic = comment</span></p>`;
+        s += `<pre style="${PRE}">${toInline(annotatedJson(expected, actualData))}</pre>`;
+      } else {
+        s += `<p style="${META}color:#991b1b">Schema not found on page — all fields missing.</p>`;
+        s += `<pre style="${PRE}">${toInline(jsonHtml(expected))}</pre>`;
+      }
+      return s;
+    };
+
+    const tot = { m:0, mi:0, w:0, e:0 };
+    const sectionHtmls = [];
+    if (lastReport.mode === 'single') {
+      const { matched, missing, wrong, extra } = groupAndSort(lastReport.results);
+      tot.m += matched.length; tot.mi += missing.length; tot.w += wrong.length; tot.e += extra.length;
+      sectionHtmls.push(buildSection(lastReport.actual.label, lastReport.expected, lastReport.actual.data, lastReport.results));
+    } else {
+      lastReport.pairs.forEach(({ expected, actual, results }) => {
+        const { matched, missing, wrong, extra } = groupAndSort(results);
+        tot.m += matched.length; tot.mi += missing.length; tot.w += wrong.length; tot.e += extra.length;
+        const typeLabel = [].concat(expected['@type'] || 'Unknown').join(', ');
+        const title = actual ? actual.label : `JSON-LD: ${typeLabel}`;
+        sectionHtmls.push(buildSection(title, expected, actual ? actual.data : null, results));
+      });
+    }
+
+    let html = `<html><body style="font-family:Arial,sans-serif;font-size:11pt;color:#1a1a1a;max-width:960px;margin:0 auto;">`;
+    html += `<h1 style="${H1}">Schema Validation Report</h1>`;
+    html += `<p style="${META}"><strong>URL:</strong> ${escHtml(lastReport.url)}<br><strong>Date:</strong> ${new Date().toLocaleString()}</p>`;
+    html += `<p style="${META}margin-bottom:20px">${summaryBadges(tot.m, tot.mi, tot.w, tot.e)}</p>`;
+    html += sectionHtmls.join('');
+    html += `</body></html>`;
+
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })]);
+      const btn = document.querySelector('.btn-copy');
+      if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = '📋 Copy Report', 2500); }
+    } catch {
+      const btn = document.querySelector('.btn-copy');
+      if (btn) { btn.textContent = '⚠️ Copy failed'; setTimeout(() => btn.textContent = '📋 Copy Report', 2000); }
+    }
+  }
+
+  // ─── Utilities ────────────────────────────────────────────────────────
+  function fmtVal(v) {
+    if (v === null) return 'null';
+    if (v === undefined) return 'undefined';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  el('url').addEventListener('keydown', e => { if (e.key === 'Enter') validate(); });
+</script>
+
+</body>
+</html>
